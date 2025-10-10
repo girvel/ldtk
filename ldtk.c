@@ -5,21 +5,8 @@
 #include "nob.h"
 #include "ldtk.h"
 #include "macros.h"
+#include "json_toolkit.c"
 
-
-int field_int(json_t *base, const char *identifier, char **error) {
-    json_t *ptr = json_object_get(base, identifier);
-    if (!json_is_integer(ptr)) {
-        Nob_String_Builder sb = {0};
-        nob_sb_append_cstr(&sb, "Expected .");
-        nob_sb_append_cstr(&sb, identifier);
-        nob_sb_append_cstr(&sb, " to be integer");
-        nob_sb_append_null(&sb);
-        *error = sb.items;
-        return 0;
-    }
-    return (int) json_integer_value(ptr);
-}
 
 void put_level_size(json_t *levels, Level *fallen_level, char **error) {
     size_t levels_n = json_array_size(levels);
@@ -53,57 +40,24 @@ Level read_level(const char *path, char **error) {
         goto end;
     }
 
-    json_t *levels = json_object_get(root, "levels");
-    if (!json_is_array(levels)) {
-        *error = "Expected .levels to be an array";
-        goto end;
-    }
+    json_t *levels = $(field_array(root, "levels", error));
 
     MUST(put_level_size(levels, &result, error));
 
     size_t levels_n = json_array_size(levels);
     for (size_t i = 0; i < levels_n; ++i) {
-        json_t *level = json_array_get(levels, i);
-        if (!json_is_object(level)) {
-            *error = "Expected the level to be an object";
-            goto end;
-        }
-
-        json_t *layers = json_object_get(level, "layerInstances");
-        if (!json_is_array(layers)) {
-            *error = "Expected level's .layerInstances to be an array";
-            goto end;
-        }
+        json_t *level = $(item_object(levels, i, error));
+        json_t *layers = $(field_array(level, "layerInstances", error));
 
         size_t layers_n = json_array_size(layers);
         for (size_t j = 0; j < layers_n; ++j) {
-            json_t *layer = json_array_get(layers, j);
-            if (!json_is_object(layer)) {
-                *error = "Expected layer to be an object";
-                goto end;
-            }
-
-            json_t *entity_instances = json_object_get(layer, "entityInstances");
-            if (!json_is_array(entity_instances)) {
-                *error = "Expected entityInstances to be an array";
-                goto end;
-            }
+            json_t *layer = $(item_object(layers, i, error));
+            json_t *entity_instances = $(field_array(layer, "entityInstances", error));
 
             size_t instances_n = json_array_size(entity_instances);
             for (size_t k = 0; k < instances_n; ++k) {
-                json_t *entity = json_array_get(entity_instances, k);
-                if (!json_is_object(entity)) {
-                    *error = "...";
-                    goto end;
-                }
-
-                json_t *identifier_ptr = json_object_get(entity, "__identifier");
-                if (!json_is_string(identifier_ptr)) {
-                    *error = "...";
-                    goto end;
-                }
-
-                const char *identifier = json_string_value(identifier_ptr);
+                json_t *entity = $(item_object(entity_instances, k, error));
+                const char *identifier = $(field_string(entity, "__identifier", error));
 
                 if (strcmp(identifier, "position") == 0) {
                     Position p = {
