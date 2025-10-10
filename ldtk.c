@@ -55,7 +55,7 @@ end:
     return result;
 }
 
-void put_positions(json_t *layer, Positions *positions, char **error) {
+void put_positions(json_t *layer, int offset_x, int offset_y, Positions *positions, char **error) {
     json_t *entity_instances = $(field_array(layer, "entityInstances", error));
 
     size_t instances_n = json_array_size(entity_instances);
@@ -64,13 +64,23 @@ void put_positions(json_t *layer, Positions *positions, char **error) {
         const char *identifier = $(field_string(entity, "__identifier", error));
 
         if (strcmp(identifier, "position") == 0) {
-            nob_da_append(positions, $(read_position(entity, error)));
+            Position p = $(read_position(entity, error));
+            p.x += offset_x;
+            p.y += offset_y;
+            nob_da_append(positions, p);
         }
     }
 
 end:
     return;
 }
+
+/* PLAN:
+ *
+ * read total grid size
+ * read all layers; entity captures are getting cached
+ * apply entity captures, setting `.name`s
+ */
 
 Level read_level(const char *path, char **error) {
     Level result = {0};
@@ -89,6 +99,8 @@ Level read_level(const char *path, char **error) {
     size_t levels_n = json_array_size(levels);
     for (size_t i = 0; i < levels_n; ++i) {
         json_t *level = $(item_object(levels, i, error));
+        int offset_x = $(field_int(level, "worldX", error)) / 16;
+        int offset_y = $(field_int(level, "worldY", error)) / 16;
         json_t *layers = $(field_array(level, "layerInstances", error));
 
         size_t layers_n = json_array_size(layers);
@@ -98,7 +110,7 @@ Level read_level(const char *path, char **error) {
             const char *identifier = $(field_string(layer, "__identifier", error));
 
             if (strcmp(identifier, "positions") == 0) {
-                MUST(put_positions(layer, &result.positions, error));
+                MUST(put_positions(layer, offset_x, offset_y, &result.positions, error));
             }
         }
     }
