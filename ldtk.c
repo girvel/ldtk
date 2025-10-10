@@ -253,13 +253,15 @@ int main() {
         return 1;
     }
 
-    printf("(%d, %d)\n", fallen_level.w, fallen_level.h);
-    // for (size_t i = 0; i < fallen_level.positions.count; ++i) {
-    //     Position p = fallen_level.positions.items[i];
-    //     printf("- %s: (%d, %d)\n", p.rails_name, p.x, p.y);
-    // }
+    printf("Size: (%d, %d)\n", fallen_level.w, fallen_level.h);
 
-    printf("Entities (%zu):\n", fallen_level.entities.count);
+    printf("\nPositions:\n");
+    for (size_t i = 0; i < fallen_level.positions.count; ++i) {
+        Position p = fallen_level.positions.items[i];
+        printf("- %s: (%d, %d)\n", p.rails_name, p.x, p.y);
+    }
+
+    printf("\nEntities (%zu):\n", fallen_level.entities.count);
     nob_da_foreach(Entity, e, &fallen_level.entities) {
         if (e->identifier.type == Identifier_string) {
             printf("- %s: %s@(%d, %d)\n", e->identifier.value.string, e->grid_layer, e->x, e->y);
