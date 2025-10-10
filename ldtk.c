@@ -263,10 +263,16 @@ int main() {
 
     printf("\nEntities (%zu):\n", fallen_level.entities.count);
     nob_da_foreach(Entity, e, &fallen_level.entities) {
+        const char *rails_name = "";
+        if (e->rails_name != NULL) rails_name = e->rails_name;
+
+        const char *args = "";
+        if (e->args != NULL) args = e->args;
+
         if (e->identifier.type == Identifier_string) {
-            printf("- %s: %s@(%d, %d)\n", e->identifier.value.string, e->grid_layer, e->x, e->y);
+            printf("- %s: %s@(%d, %d) %s %s\n", e->identifier.value.string, e->grid_layer, e->x, e->y, rails_name, args);
         } else {
-            printf("- %d: %s@(%d, %d)\n", e->identifier.value.integer, e->grid_layer, e->x, e->y);
+            printf("- %d: %s@(%d, %d) %s %s\n", e->identifier.value.integer, e->grid_layer, e->x, e->y, rails_name, args);
         }
     }
     
