@@ -1,5 +1,4 @@
 #include <assert.h>
-#include <string.h>
 #define NOB_IMPLEMENTATION
 #include "nob.h"
 
@@ -33,6 +32,7 @@ bool run(int argc, char **argv) {
     nob_cc(&cmd);
     nob_cc_inputs(&cmd, BUILD_FOLDER"ldtk.o", BUILD_FOLDER"nob.o");
     nob_cc_output(&cmd, BUILD_FOLDER"ldtk");
+    nob_cmd_append(&cmd, "-ljansson");
 
     MUST(nob_cmd_run(&cmd));
 
