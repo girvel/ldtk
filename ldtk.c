@@ -8,6 +8,12 @@
 #include "json_toolkit.c"
 
 
+char *clone(const char *source) {
+    char *result = malloc(strlen(source) + 1);
+    strcpy(result, source);
+    return result;
+}
+
 void put_level_size(json_t *levels, int *w, int *h, char **error) {
     size_t levels_n = json_array_size(levels);
     for (size_t i = 0; i < levels_n; ++i) {
@@ -40,10 +46,7 @@ Position read_position(json_t *entity, char **error) {
         const char *identifier = $(field_string(field, "__identifier", error));
 
         if (strcmp(identifier, "rails_name") == 0) {
-            const char *value = $(field_string(field, "__value", error));
-
-            result.name = malloc(strlen(value));
-            strcpy(result.name, value);
+            result.rails_name = clone($(field_string(field, "__value", error)));
             break;
         }
     }
@@ -72,6 +75,64 @@ void put_positions(json_t *layer, int offset_x, int offset_y, Positions *positio
     }
 
 end:
+    return;
+}
+
+void put_entities(json_t *layer, int offset_x, int offset_y, Entities *entities, char **error) {
+    char *grid_layer = NULL;  // for free to work
+
+    json_t *entity_instances = $(field_array(layer, "entityInstances", error));
+    grid_layer = clone($(field_string(layer, "__identifier", error)));
+
+    Nob_String_View sv = nob_sv_from_cstr(grid_layer);
+    if (!nob_sv_end_with(sv, "_entities")) {
+        Nob_String_Builder sb = {0};
+        nob_sb_append_cstr(&sb, "Expected layer ");
+        nob_sb_append_cstr(&sb, grid_layer);
+        nob_sb_append_cstr(&sb, " to end with '_entities'");
+        nob_sb_append_null(&sb);
+
+        *error = sb.items;
+        goto end;
+    } else {
+        grid_layer[sv.count - 9] = '\0';
+    }
+
+    size_t instances_n = json_array_size(entity_instances);
+    for (size_t i = 0; i < instances_n; ++i) {
+        json_t *entity = $(item_object(entity_instances, i, error));
+        Entity e;
+
+        e.x = $(field_int(entity, "__worldX", error)) / 16 + 1 + offset_x;
+        e.y = $(field_int(entity, "__worldY", error)) / 16 + 1 + offset_y;
+        e.grid_layer = clone(grid_layer);
+
+        e.identifier.type = Identifier_string;
+        e.identifier.value.string = clone($(field_string(entity, "__identifier", error)));
+
+        e.args = NULL;
+        e.rails_name = NULL;
+
+        json_t *field_instances = $(field_array(entity, "fieldInstances", error));
+        size_t fields_n = json_array_size(field_instances);
+        for (size_t j = 0; j < fields_n; ++j) {
+            json_t *field = $(item_object(field_instances, j, error));
+            const char *field_name = $(field_string(field, "__identifier", error));
+
+            if (strcmp(field_name, "rails_name") == 0) {
+                if (!json_is_null(json_object_get(field, "__value"))) {
+                    e.rails_name = clone($(field_string(field, "__value", error)));
+                }
+            } else if (strcmp(field_name, "args") == 0) {
+                e.args = clone($(field_string(field, "__value", error)));
+            }
+        }
+
+        nob_da_append(entities, e);
+    }
+
+end:
+    free(grid_layer);
     return;
 }
 
@@ -111,6 +172,22 @@ Level read_level(const char *path, char **error) {
 
             if (strcmp(identifier, "positions") == 0) {
                 MUST(put_positions(layer, offset_x, offset_y, &result.positions, error));
+                continue;
+            }
+
+            const char *type = $(field_string(layer, "__type", error));
+
+            if (strcmp(type, "Entities") == 0) {
+                MUST(put_entities(layer, offset_x, offset_y, &result.entities, error));
+            } else if (strcmp(type, "Tiles") == 0) {
+            } else if (strcmp(type, "IntGrid") == 0) {
+            } else {
+                Nob_String_Builder sb = {0};
+                nob_sb_append_cstr(&sb, "Unknown layer type ");
+                nob_sb_append_cstr(&sb, type);
+                nob_sb_append_null(&sb);
+                *error = sb.items;
+                goto end;
             }
         }
     }
@@ -129,9 +206,13 @@ int main() {
     }
 
     printf("(%d, %d)\n", fallen_level.w, fallen_level.h);
-    for (size_t i = 0; i < fallen_level.positions.count; ++i) {
-        Position p = fallen_level.positions.items[i];
-        printf("- %s: (%d, %d)\n", p.name, p.x, p.y);
+    // for (size_t i = 0; i < fallen_level.positions.count; ++i) {
+    //     Position p = fallen_level.positions.items[i];
+    //     printf("- %s: (%d, %d)\n", p.rails_name, p.x, p.y);
+    // }
+
+    nob_da_foreach(Entity, e, &fallen_level.entities) {
+        printf("- %s: %s@(%d, %d)\n", e->identifier.value.string, e->grid_layer, e->x, e->y);
     }
     
     return 0;
