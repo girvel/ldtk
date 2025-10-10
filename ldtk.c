@@ -30,21 +30,41 @@ end:
     return;
 }
 
+Position read_position(json_t *entity, char **error) {
+    Position result;
+
+    json_t *field_instances = $(field_array(entity, "fieldInstances", error));
+    size_t fields_n = json_array_size(field_instances);
+    for (size_t j = 0; j < fields_n; ++j) {
+        json_t *field = $(item_object(field_instances, j, error));
+        const char *identifier = $(field_string(field, "__identifier", error));
+
+        if (strcmp(identifier, "rails_name") == 0) {
+            const char *value = $(field_string(field, "__value", error));
+
+            result.name = malloc(strlen(value));
+            strcpy(result.name, value);
+            break;
+        }
+    }
+
+    result.x = $(field_int(entity, "__worldX", error)) / 16 + 1;
+    result.y = $(field_int(entity, "__worldY", error)) / 16 + 1;
+
+end:
+    return result;
+}
+
 void put_positions(json_t *layer, Positions *positions, char **error) {
     json_t *entity_instances = $(field_array(layer, "entityInstances", error));
 
     size_t instances_n = json_array_size(entity_instances);
-    for (size_t k = 0; k < instances_n; ++k) {
-        json_t *entity = $(item_object(entity_instances, k, error));
+    for (size_t i = 0; i < instances_n; ++i) {
+        json_t *entity = $(item_object(entity_instances, i, error));
         const char *identifier = $(field_string(entity, "__identifier", error));
 
         if (strcmp(identifier, "position") == 0) {
-            Position p = {
-              .name = "hello",
-              .x = 0,
-              .y = 0,
-            };
-            nob_da_append(positions, p);
+            nob_da_append(positions, $(read_position(entity, error)));
         }
     }
 
@@ -73,7 +93,7 @@ Level read_level(const char *path, char **error) {
 
         size_t layers_n = json_array_size(layers);
         for (size_t j = 0; j < layers_n; ++j) {
-            json_t *layer = $(item_object(layers, i, error));
+            json_t *layer = $(item_object(layers, j, error));
 
             const char *identifier = $(field_string(layer, "__identifier", error));
 
@@ -82,7 +102,9 @@ Level read_level(const char *path, char **error) {
             }
         }
     }
+
 end:
+    json_decref(root);
     return result;
 }
 
