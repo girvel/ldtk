@@ -12,7 +12,12 @@
 
 #define $(EXPR) ({ \
     __typeof__ (EXPR) _eval_result = (EXPR); \
-    if (*error != NULL) return result; \
+    if (*error != NULL) goto end; \
     _eval_result; \
 })
+
+#define MUST(STAT) do { \
+    STAT; \
+    if (*error != NULL) goto end; \
+} while (0)
 
