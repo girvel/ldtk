@@ -1,4 +1,3 @@
-#include <jansson.h>
 #include <stddef.h>
 
 
@@ -20,7 +19,7 @@ typedef enum {
 } IdentifierType;
 
 typedef union {
-    const char *string;
+    char *string;
     int integer;
 } IdentifierValue;
 
@@ -52,3 +51,4 @@ typedef struct {
 } Level;
 
 Level read_level(const char *path, char **error);
+void free_level(Level level);

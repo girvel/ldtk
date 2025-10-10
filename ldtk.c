@@ -349,6 +349,23 @@ end:
     return result;
 }
 
+void free_level(Level level) {
+    nob_da_foreach(Entity, e, &level.entities) {
+        free(e->grid_layer);
+        free(e->args);
+        free(e->rails_name);
+        if (e->identifier.type == Identifier_string) {
+            free(e->identifier.value.string);
+        }
+    }
+    nob_da_foreach(Position, p, &level.positions) {
+        free(p->rails_name);
+    }
+
+    nob_da_free(level.entities);
+    nob_da_free(level.positions);
+}
+
 int main() {
     char *error = NULL;
     Level fallen_level = read_level("../dot/levels/main/main.ldtk", &error);
@@ -379,6 +396,8 @@ int main() {
             printf("- %d: %s@(%d, %d) %s %s\n", e->identifier.value.integer, e->grid_layer, e->x, e->y, rails_name, args);
         }
     }
+
+    free_level(fallen_level);
     
     return 0;
 }
