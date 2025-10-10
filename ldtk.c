@@ -2,28 +2,8 @@
 #include <stdio.h>
 #include <jansson.h>
 #include "nob.h"
-
-typedef struct {
-    int w, h;
-} Level;
-
-#define MAX2(A, B) ({ \
-    __typeof__ (A) _a = (A); \
-    __typeof__ (B) _b = (B); \
-    _a > _b ? _a : _b; \
-})
-
-#define MIN2(A, B) ({ \
-    __typeof__ (A) _a = (A); \
-    __typeof__ (B) _b = (B); \
-    _a < _b ? _a : _b; \
-}
-
-#define $(EXPR) ({ \
-    __typeof__ (EXPR) _eval_result = (EXPR); \
-    if (*error != NULL) return result; \
-    _eval_result; \
-})
+#include "ldtk.h"
+#include "macros.h"
 
 int field_int(json_t *base, const char *identifier, char **error) {
     json_t *ptr = json_object_get(base, identifier);
