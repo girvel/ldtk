@@ -38,6 +38,48 @@ end:
 
 Position read_position(json_t *entity, char **error) {
     Position result;
+    result.rails_name = NULL;
+
+    json_t *field_instances = $(field_array(entity, "fieldInstances", error));
+    size_t fields_n = json_array_size(field_instances);
+    for (size_t j = 0; j < fields_n; ++j) {
+        json_t *field = $(item_object(field_instances, j, error));
+        const char *identifier = $(field_string(field, "__identifier", error));
+
+        if (strcmp(identifier, "rails_name") == 0) {
+            //if (json_is_null(field, 
+            result.rails_name = clone($(field_string(field, "__value", error)));
+            break;
+        }
+    }
+
+    // if (result.rails_name == NULL) {
+    //     *error = "Position has no .rails_name field";
+    //     goto end;
+    // }
+
+    result.x = $(field_int(entity, "__worldX", error)) / 16 + 1;
+    result.y = $(field_int(entity, "__worldY", error)) / 16 + 1;
+
+end:
+    return result;
+}
+
+typedef struct {
+    int x;
+    int y;
+    char *grid_layer;
+    char *rails_name;
+} Capture;
+
+typedef struct {
+    Capture *items;
+    size_t count;
+    size_t capacity;
+} Captures;
+
+Capture read_capture(json_t *entity, char **error) {
+    Capture result;
 
     json_t *field_instances = $(field_array(entity, "fieldInstances", error));
     size_t fields_n = json_array_size(field_instances);
@@ -47,7 +89,8 @@ Position read_position(json_t *entity, char **error) {
 
         if (strcmp(identifier, "rails_name") == 0) {
             result.rails_name = clone($(field_string(field, "__value", error)));
-            break;
+        } else if (strcmp(identifier, "layer") == 0) {
+            result.grid_layer = clone($(field_string(field, "__value", error)));
         }
     }
 
@@ -58,7 +101,39 @@ end:
     return result;
 }
 
-void put_positions(json_t *layer, int offset_x, int offset_y, Positions *positions, char **error) {
+
+void use_captures(Entity *e, Captures *captures, char **error) {
+    for (size_t i = 0; i < captures->count; ++i) {
+        Capture *c = captures->items + i;
+        if (e->x == c->x
+            && e->y == c->y
+            && strcmp(e->grid_layer, c->grid_layer) == 0
+        ) {
+            if (e->rails_name != NULL) {
+                Nob_String_Builder sb = {0};
+                nob_sb_append_cstr(&sb, "Attempt to capture an entity as ");
+                nob_sb_append_cstr(&sb, c->rails_name);
+                nob_sb_append_cstr(&sb, ", when it already has rails_name ");
+                nob_sb_append_cstr(&sb, e->rails_name);
+                nob_sb_append_null(&sb);
+
+                *error = sb.items;
+                goto end;
+            }
+
+            e->rails_name = c->rails_name;
+            nob_da_remove_unordered(captures, i);
+            break;
+        }
+    }
+
+end:
+    return;
+}
+
+void put_positions(
+    json_t *layer, Positions *positions, Captures *captures, char **error
+) {
     json_t *entity_instances = $(field_array(layer, "entityInstances", error));
 
     size_t instances_n = json_array_size(entity_instances);
@@ -68,9 +143,18 @@ void put_positions(json_t *layer, int offset_x, int offset_y, Positions *positio
 
         if (strcmp(identifier, "position") == 0) {
             Position p = $(read_position(entity, error));
-            p.x += offset_x;
-            p.y += offset_y;
             nob_da_append(positions, p);
+        } else if (strcmp(identifier, "entity_capture") == 0) {
+            Capture c = $(read_capture(entity, error));
+            nob_da_append(captures, c);
+        } else {
+            Nob_String_Builder sb = {0};
+            nob_sb_append_cstr(&sb, "Unknown position layer entity ");
+            nob_sb_append_cstr(&sb, identifier);
+            nob_sb_append_null(&sb);
+
+            *error = sb.items;
+            goto end;
         }
     }
 
@@ -78,7 +162,7 @@ end:
     return;
 }
 
-void put_entities(json_t *layer, int offset_x, int offset_y, Entities *entities, char **error) {
+void put_entities(json_t *layer, Captures *captures, Entities *entities, char **error) {
     char *grid_layer = NULL;  // for free to work
 
     json_t *entity_instances = $(field_array(layer, "entityInstances", error));
@@ -103,8 +187,8 @@ void put_entities(json_t *layer, int offset_x, int offset_y, Entities *entities,
         json_t *entity = $(item_object(entity_instances, i, error));
         Entity e;
 
-        e.x = $(field_int(entity, "__worldX", error)) / 16 + 1 + offset_x;
-        e.y = $(field_int(entity, "__worldY", error)) / 16 + 1 + offset_y;
+        e.x = $(field_int(entity, "__worldX", error)) / 16 + 1;
+        e.y = $(field_int(entity, "__worldY", error)) / 16 + 1;
         e.grid_layer = clone(grid_layer);
 
         e.identifier.type = Identifier_string;
@@ -128,15 +212,18 @@ void put_entities(json_t *layer, int offset_x, int offset_y, Entities *entities,
             }
         }
 
+        MUST(use_captures(&e, captures, error));
+
         nob_da_append(entities, e);
     }
 
 end:
-    free(grid_layer);
-    return;
-}
+    free(grid_layer); return; }
 
-void put_tiles(json_t *layer, int offset_x, int offset_y, bool is_auto, Entities *entities, char **error) {
+void put_tiles(
+    json_t *layer, int offset_x, int offset_y, bool is_auto,
+    Captures *captures, Entities *entities, char **error
+) {
     char *grid_layer = NULL;  // for free to work
 
     json_t *instances = $(field_array(layer, is_auto ? "autoLayerTiles" : "gridTiles", error));
@@ -174,6 +261,8 @@ void put_tiles(json_t *layer, int offset_x, int offset_y, bool is_auto, Entities
         e.args = NULL;
         e.rails_name = NULL;
 
+        MUST(use_captures(&e, captures, error));
+
         nob_da_append(entities, e);
     }
 
@@ -210,6 +299,7 @@ Level read_level(const char *path, char **error) {
         int offset_y = $(field_int(level, "worldY", error)) / 16;
         json_t *layers = $(field_array(level, "layerInstances", error));
 
+        Captures captures = {0};
         size_t layers_n = json_array_size(layers);
         for (size_t j = 0; j < layers_n; ++j) {
             json_t *layer = $(item_object(layers, j, error));
@@ -217,18 +307,18 @@ Level read_level(const char *path, char **error) {
             const char *identifier = $(field_string(layer, "__identifier", error));
 
             if (strcmp(identifier, "positions") == 0) {
-                MUST(put_positions(layer, offset_x, offset_y, &result.positions, error));
+                MUST(put_positions(layer, &result.positions, &captures, error));
                 continue;
             }
 
             const char *type = $(field_string(layer, "__type", error));
 
             if (strcmp(type, "Entities") == 0) {
-                MUST(put_entities(layer, offset_x, offset_y, &result.entities, error));
+                MUST(put_entities(layer, &captures, &result.entities, error));
             } else if (strcmp(type, "Tiles") == 0) {
-                MUST(put_tiles(layer, offset_x, offset_y, false, &result.entities, error));
+                MUST(put_tiles(layer, offset_x, offset_y, false, &captures, &result.entities, error));
             } else if (strcmp(type, "IntGrid") == 0) {
-                MUST(put_tiles(layer, offset_x, offset_y, true, &result.entities, error));
+                MUST(put_tiles(layer, offset_x, offset_y, true, &captures, &result.entities, error));
             } else {
                 Nob_String_Builder sb = {0};
                 nob_sb_append_cstr(&sb, "Unknown layer type ");
@@ -238,6 +328,20 @@ Level read_level(const char *path, char **error) {
                 goto end;
             }
         }
+
+        if (captures.count > 0) {
+            Nob_String_Builder sb = {0};
+            nob_sb_append_cstr(&sb, "Entity capture misses: ");
+            nob_da_foreach(Capture, c, &captures) {
+                nob_sb_append_cstr(&sb, c->rails_name);
+                nob_sb_append_cstr(&sb, ", ");
+            }
+
+            *error = sb.items;
+            goto end;
+        }
+
+        nob_da_free(captures);
     }
 
 end:
