@@ -136,6 +136,52 @@ end:
     return;
 }
 
+void put_tiles(json_t *layer, int offset_x, int offset_y, bool is_auto, Entities *entities, char **error) {
+    char *grid_layer = NULL;  // for free to work
+
+    json_t *instances = $(field_array(layer, is_auto ? "autoLayerTiles" : "gridTiles", error));
+    grid_layer = clone($(field_string(layer, "__identifier", error)));
+
+    if (is_auto) {
+        Nob_String_View sv = nob_sv_from_cstr(grid_layer);
+        if (!nob_sv_end_with(sv, "_auto")) {
+            Nob_String_Builder sb = {0};
+            nob_sb_append_cstr(&sb, "Expected layer ");
+            nob_sb_append_cstr(&sb, grid_layer);
+            nob_sb_append_cstr(&sb, " to end with '_auto'");
+            nob_sb_append_null(&sb);
+
+            *error = sb.items;
+            goto end;
+        } else {
+            grid_layer[sv.count - 5] = '\0';
+        }
+    }
+
+    size_t instances_n = json_array_size(instances);
+    for (size_t i = 0; i < instances_n; ++i) {
+        json_t *entity = $(item_object(instances, i, error));
+        Entity e;
+
+        json_t *px = $(field_array(entity, "px", error));
+        e.x = $(item_int(px, 0, error)) / 16 + 1 + offset_x;
+        e.y = $(item_int(px, 1, error)) / 16 + 1 + offset_y;
+        e.grid_layer = clone(grid_layer);
+
+        e.identifier.type = Identifier_integer;
+        e.identifier.value.integer = $(field_int(entity, "t", error)) + 1;
+
+        e.args = NULL;
+        e.rails_name = NULL;
+
+        nob_da_append(entities, e);
+    }
+
+end:
+    free(grid_layer);
+    return;
+}
+
 /* PLAN:
  *
  * read total grid size
@@ -180,7 +226,9 @@ Level read_level(const char *path, char **error) {
             if (strcmp(type, "Entities") == 0) {
                 MUST(put_entities(layer, offset_x, offset_y, &result.entities, error));
             } else if (strcmp(type, "Tiles") == 0) {
+                MUST(put_tiles(layer, offset_x, offset_y, false, &result.entities, error));
             } else if (strcmp(type, "IntGrid") == 0) {
+                MUST(put_tiles(layer, offset_x, offset_y, true, &result.entities, error));
             } else {
                 Nob_String_Builder sb = {0};
                 nob_sb_append_cstr(&sb, "Unknown layer type ");
@@ -211,8 +259,13 @@ int main() {
     //     printf("- %s: (%d, %d)\n", p.rails_name, p.x, p.y);
     // }
 
+    printf("Entities (%zu):\n", fallen_level.entities.count);
     nob_da_foreach(Entity, e, &fallen_level.entities) {
-        printf("- %s: %s@(%d, %d)\n", e->identifier.value.string, e->grid_layer, e->x, e->y);
+        if (e->identifier.type == Identifier_string) {
+            printf("- %s: %s@(%d, %d)\n", e->identifier.value.string, e->grid_layer, e->x, e->y);
+        } else {
+            printf("- %d: %s@(%d, %d)\n", e->identifier.value.integer, e->grid_layer, e->x, e->y);
+        }
     }
     
     return 0;

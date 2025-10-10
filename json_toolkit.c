@@ -53,3 +53,12 @@ json_t *item_object(json_t *array, size_t i, char **error) {
     return ptr;
 }
 
+int item_int(json_t *array, size_t i, char **error) {
+    json_t *ptr = json_array_get(array, i);
+    if (!json_is_integer(ptr)) {
+        *error = "Expected array item to be an integer";
+        return 0;
+    }
+    return (int) json_integer_value(ptr);
+}
+
