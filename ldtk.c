@@ -8,12 +8,6 @@
 #include "json_toolkit.c"
 
 
-char *clone(const char *source) {
-    char *result = malloc(strlen(source) + 1);
-    strcpy(result, source);
-    return result;
-}
-
 void put_level_size(json_t *levels, int *w, int *h, char **error) {
     size_t levels_n = json_array_size(levels);
     for (size_t i = 0; i < levels_n; ++i) {
@@ -48,7 +42,9 @@ Position read_position(json_t *entity, char **error) {
 
         if (strcmp(identifier, "rails_name") == 0) {
             //if (json_is_null(field, 
-            result.rails_name = clone($(field_string(field, "__value", error)));
+            printf("1\n");
+            result.rails_name = strdup($(field_string(field, "__value", error)));
+            printf("2\n");
             break;
         }
     }
@@ -88,9 +84,9 @@ Capture read_capture(json_t *entity, char **error) {
         const char *identifier = $(field_string(field, "__identifier", error));
 
         if (strcmp(identifier, "rails_name") == 0) {
-            result.rails_name = clone($(field_string(field, "__value", error)));
+            result.rails_name = strdup($(field_string(field, "__value", error)));
         } else if (strcmp(identifier, "layer") == 0) {
-            result.grid_layer = clone($(field_string(field, "__value", error)));
+            result.grid_layer = strdup($(field_string(field, "__value", error)));
         }
     }
 
@@ -166,7 +162,7 @@ void put_entities(json_t *layer, Captures *captures, Entities *entities, char **
     char *grid_layer = NULL;  // for free to work
 
     json_t *entity_instances = $(field_array(layer, "entityInstances", error));
-    grid_layer = clone($(field_string(layer, "__identifier", error)));
+    grid_layer = strdup($(field_string(layer, "__identifier", error)));
 
     Nob_String_View sv = nob_sv_from_cstr(grid_layer);
     if (!nob_sv_end_with(sv, "_entities")) {
@@ -189,10 +185,10 @@ void put_entities(json_t *layer, Captures *captures, Entities *entities, char **
 
         e.x = $(field_int(entity, "__worldX", error)) / 16 + 1;
         e.y = $(field_int(entity, "__worldY", error)) / 16 + 1;
-        e.grid_layer = clone(grid_layer);
+        e.grid_layer = strdup(grid_layer);
 
         e.identifier.type = Identifier_string;
-        e.identifier.value.string = clone($(field_string(entity, "__identifier", error)));
+        e.identifier.value.string = strdup($(field_string(entity, "__identifier", error)));
 
         e.args = NULL;
         e.rails_name = NULL;
@@ -205,10 +201,10 @@ void put_entities(json_t *layer, Captures *captures, Entities *entities, char **
 
             if (strcmp(field_name, "rails_name") == 0) {
                 if (!json_is_null(json_object_get(field, "__value"))) {
-                    e.rails_name = clone($(field_string(field, "__value", error)));
+                    e.rails_name = strdup($(field_string(field, "__value", error)));
                 }
             } else if (strcmp(field_name, "args") == 0) {
-                e.args = clone($(field_string(field, "__value", error)));
+                e.args = strdup($(field_string(field, "__value", error)));
             }
         }
 
@@ -227,7 +223,7 @@ void put_tiles(
     char *grid_layer = NULL;  // for free to work
 
     json_t *instances = $(field_array(layer, is_auto ? "autoLayerTiles" : "gridTiles", error));
-    grid_layer = clone($(field_string(layer, "__identifier", error)));
+    grid_layer = strdup($(field_string(layer, "__identifier", error)));
 
     if (is_auto) {
         Nob_String_View sv = nob_sv_from_cstr(grid_layer);
@@ -253,7 +249,7 @@ void put_tiles(
         json_t *px = $(field_array(entity, "px", error));
         e.x = $(item_int(px, 0, error)) / 16 + 1 + offset_x;
         e.y = $(item_int(px, 1, error)) / 16 + 1 + offset_y;
-        e.grid_layer = clone(grid_layer);
+        e.grid_layer = strdup(grid_layer);
 
         e.identifier.type = Identifier_integer;
         e.identifier.value.integer = $(field_int(entity, "t", error)) + 1;
@@ -282,7 +278,9 @@ Level read_level(const char *path, char **error) {
     Level result = {0};
 
     json_error_t json_error;
-    json_t *root = json_load_file(path, 0, &json_error);
+    json_t *root = json_load_file(path, 0, &json_error);  // TODO handle json_error
+    assert(root != NULL);
+
     if (!json_is_object(root)) {
         *error = "Expected the level to contain an object";
         goto end;
@@ -294,6 +292,7 @@ Level read_level(const char *path, char **error) {
 
     size_t levels_n = json_array_size(levels);
     for (size_t i = 0; i < levels_n; ++i) {
+        printf("i=%zu\n", i);
         json_t *level = $(item_object(levels, i, error));
         int offset_x = $(field_int(level, "worldX", error)) / 16;
         int offset_y = $(field_int(level, "worldY", error)) / 16;
@@ -302,6 +301,7 @@ Level read_level(const char *path, char **error) {
         Captures captures = {0};
         size_t layers_n = json_array_size(layers);
         for (size_t j = 0; j < layers_n; ++j) {
+            printf("j=%zu\n", j);
             json_t *layer = $(item_object(layers, j, error));
 
             const char *identifier = $(field_string(layer, "__identifier", error));
@@ -364,40 +364,4 @@ void free_level(Level level) {
 
     nob_da_free(level.entities);
     nob_da_free(level.positions);
-}
-
-int main() {
-    char *error = NULL;
-    Level fallen_level = read_level("../dot/levels/main/main.ldtk", &error);
-    if (error != NULL) {
-        printf("error: %s\n", error);
-        return 1;
-    }
-
-    printf("Size: (%d, %d)\n", fallen_level.w, fallen_level.h);
-
-    printf("\nPositions:\n");
-    for (size_t i = 0; i < fallen_level.positions.count; ++i) {
-        Position p = fallen_level.positions.items[i];
-        printf("- %s: (%d, %d)\n", p.rails_name, p.x, p.y);
-    }
-
-    printf("\nEntities (%zu):\n", fallen_level.entities.count);
-    nob_da_foreach(Entity, e, &fallen_level.entities) {
-        const char *rails_name = "";
-        if (e->rails_name != NULL) rails_name = e->rails_name;
-
-        const char *args = "";
-        if (e->args != NULL) args = e->args;
-
-        if (e->identifier.type == Identifier_string) {
-            printf("- %s: %s@(%d, %d) %s %s\n", e->identifier.value.string, e->grid_layer, e->x, e->y, rails_name, args);
-        } else {
-            printf("- %d: %s@(%d, %d) %s %s\n", e->identifier.value.integer, e->grid_layer, e->x, e->y, rails_name, args);
-        }
-    }
-
-    free_level(fallen_level);
-    
-    return 0;
 }

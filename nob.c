@@ -31,8 +31,23 @@ bool run(int argc, char **argv) {
 
     nob_cc(&cmd);
     nob_cc_inputs(&cmd, BUILD_FOLDER"ldtk.o", BUILD_FOLDER"nob.o");
-    nob_cc_output(&cmd, BUILD_FOLDER"ldtk");
-    nob_cmd_append(&cmd, "-ljansson");
+    nob_cc_output(&cmd, "../dot/engine/lib/libldtk.so");
+    nob_cmd_append(&cmd, "-shared", "-Wl,-Bstatic", "-ljansson", "-Wl,-Bdynamic");
+
+    MUST(nob_cmd_run(&cmd));
+
+    nob_cc(&cmd);
+    nob_cc_flags(&cmd);
+    nob_cmd_append(&cmd, "-c", "-fPIC", "-I.");
+    nob_cc_inputs(&cmd, "main.c");
+    nob_cc_output(&cmd, BUILD_FOLDER"main.o");
+
+    MUST(nob_cmd_run(&cmd));
+
+    nob_cc(&cmd);
+    nob_cc_inputs(&cmd, BUILD_FOLDER"main.o", "../dot/engine/lib/libldtk.so");
+    nob_cc_output(&cmd, BUILD_FOLDER"main");
+    nob_cmd_append(&cmd);
 
     MUST(nob_cmd_run(&cmd));
 
